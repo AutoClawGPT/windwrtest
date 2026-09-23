@@ -13,7 +13,7 @@ export async function buildAgentExpose(opts: {
   verified: boolean;
   origin?: string;
 }) {
-  const origin = (opts.origin || "https://windagents.vercel.app").replace(/\/$/, "");
+  const origin = (opts.origin || "https://windwrtest.vercel.app").replace(/\/$/, "");
   const profileUrl = `${origin}/agents/${opts.agentId}`;
   const loginUrl = `${origin}/login`;
   const authorization = `Bearer ${opts.agentToken}`;

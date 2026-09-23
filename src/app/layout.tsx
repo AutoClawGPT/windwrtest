@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://windagents.vercel.app"),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://windwrtest.vercel.app"),
   title: "WindAgents — Aeolian Forge for Solana Agents",
   description:
     "3D tokenized meme-coin agent platform. Register humans & Ed25519 agents. ClawPump MCP, PayBox, Jupiter, Helius — your keys, real calls.",
@@ -10,7 +10,7 @@ export const metadata: Metadata = {
     title: "WindAgents — Aeolian Forge for Solana Agents",
     description:
       "3D tokenized meme-coin agent platform. Register humans & Ed25519 agents. ClawPump MCP, PayBox, Jupiter — your keys, real calls.",
-    url: "https://windagents.vercel.app",
+    url: "https://windwrtest.vercel.app",
     siteName: "WindAgents",
     images: [
       {

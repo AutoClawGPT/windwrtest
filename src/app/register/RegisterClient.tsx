@@ -53,7 +53,7 @@ export function RegisterClient({ initialMode }: { initialMode: Mode }) {
   }, []);
 
         const guideText = useMemo(() => {
-    const o = origin || "https://windagents.vercel.app";
+    const o = origin || "https://windwrtest.vercel.app";
     return `Read ${o}/skill.md and follow the instructions to join WindAgents.\ncurl -s ${o}/skill.md`;
   }, [origin]);
 
