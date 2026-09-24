@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { VrmStudio } from "@/components/vrm/VrmStudio";
 import { AppShell } from "@/components/hud/AppShell";
 import {
@@ -26,6 +26,21 @@ import {
 import { getToken } from "@/lib/client-auth";
 import { generateVtuberLlmReply, generateElevenLabsTtsAudio } from "@/lib/vtuber-llm";
 
+type StudioAgent = {
+  id: string;
+  name: string;
+  persona?: string | null;
+  avatarGlbUrl?: string | null;
+  avatarUrl?: string | null;
+  tokenMint?: string | null;
+};
+
+function modelUrl(agent: StudioAgent): string | null {
+  const url = (agent.avatarGlbUrl || agent.avatarUrl || "").trim();
+  if (/\.(vrm|glb|gltf)(\?|#|$)/i.test(url)) return url;
+  return null;
+}
+
 export default function VrmStudioPage() {
   const [vrmUrl, setVrmUrl] = useState("/vrm/seed-san.vrm");
   const [customUrlInput, setCustomUrlInput] = useState("");
@@ -37,7 +52,7 @@ export default function VrmStudioPage() {
   const [agentName, setAgentName] = useState("Studio");
 
   // Registered agents
-  const [registeredAgents, setRegisteredAgents] = useState<{ id: string; name: string }[]>([]);
+  const [registeredAgents, setRegisteredAgents] = useState<StudioAgent[]>([]);
   const [selectedAgentId, setSelectedAgentId] = useState("");
 
   // LLM & Voice Credentials Configuration
@@ -58,6 +73,13 @@ export default function VrmStudioPage() {
 
   // Ingest stream state
   const [ytUrl, setYtUrl] = useState("");
+  const [ytKey, setYtKey] = useState("");
+  const [ytConnected, setYtConnected] = useState(false);
+  const ytOn = useRef(false);
+  const ytPoll = useRef<number | null>(null);
+  const ytSeen = useRef<Set<string>>(new Set());
+  const ytChatId = useRef("");
+  const ytPage = useRef("");
   const [pumpToken, setPumpToken] = useState("");
   const [ingestNote, setIngestNote] = useState("");
   const [fetchingPump, setFetchingPump] = useState(false);
@@ -75,28 +97,9 @@ export default function VrmStudioPage() {
   >([]);
   const [userChatInput, setUserChatInput] = useState("");
 
-  // Fetch registered agents
   useEffect(() => {
-    const fetchAgents = async () => {
-      const token = getToken();
-      if (!token) return;
-      try {
-        const res = await fetch("/api/agents", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const data = await res.json();
-        if (data.agents && Array.isArray(data.agents)) {
-          setRegisteredAgents(data.agents);
-          if (data.agents.length > 0) {
-            setSelectedAgentId(data.agents[0].id);
-            setAgentName(data.agents[0].name);
-          }
-        }
-      } catch (err) {
-        console.warn("Failed to fetch registered agents:", err);
-      }
-    };
-    fetchAgents();
+    const saved = window.localStorage.getItem("windwrtest.youtubeApiKey");
+    if (saved) setYtKey(saved);
   }, []);
 
   // Save live config to agent endpoint /api/agents/[id]/live
@@ -190,11 +193,12 @@ export default function VrmStudioPage() {
     return `$${num.toFixed(2)}`;
   };
 
-  const handleFetchPumpToken = async () => {
-    if (!pumpToken.trim()) return;
+  const handleFetchPumpToken = async (mint?: string) => {
+    const value = (mint ?? pumpToken).trim();
+    if (!value) return;
     setFetchingPump(true);
     try {
-      const res = await fetch(`/api/live/pumpfun?mint=${encodeURIComponent(pumpToken.trim())}`);
+      const res = await fetch(`/api/live/pumpfun?mint=${encodeURIComponent(value)}`);
       const data = await res.json();
       if (data.ok) {
         setPumpData(data);
@@ -224,29 +228,142 @@ export default function VrmStudioPage() {
     }
   };
 
+  const stopYoutube = () => {
+    ytOn.current = false;
+    setYtConnected(false);
+    if (ytPoll.current) window.clearTimeout(ytPoll.current);
+    ytPoll.current = null;
+  };
+
+  const pullYoutube = async (reset: boolean) => {
+    if (!ytKey.trim() || !ytUrl.trim()) {
+      setIngestNote("Paste your YouTube Data API key and a live URL. Vercel does not store this key.");
+      return;
+    }
+    const res = await fetch("/api/live/chat/youtube", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url: ytUrl.trim(),
+        apiKey: ytKey.trim(),
+        liveChatId: reset ? "" : ytChatId.current,
+        pageToken: reset ? "" : ytPage.current,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok || data.ok === false) {
+      setIngestNote(data.message || data.error || "YouTube resolve failed.");
+      stopYoutube();
+      return;
+    }
+    if (!data.isLive || !data.activeLiveChatId) {
+      setIngestNote(data.message || `Not live${data.title ? `: ${data.title}` : ""}.`);
+      stopYoutube();
+      return;
+    }
+    ytChatId.current = data.activeLiveChatId;
+    ytPage.current = data.nextPageToken || "";
+    const fresh = (data.messages || []).filter((m: { id: string }) => !ytSeen.current.has(m.id));
+    fresh.forEach((m: { id: string }) => ytSeen.current.add(m.id));
+    if (fresh.length) {
+      const stamp = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      setChatMessages((prev) => [
+        ...prev,
+        ...fresh.map((m: { author: string; text: string }) => ({
+          user: m.author,
+          text: m.text,
+          time: stamp,
+        })),
+      ]);
+    }
+    setIngestNote(`Live chat: ${data.title || "YouTube"} · ${ytSeen.current.size} lines`);
+    if (!ytOn.current) return;
+    const wait = Math.max(5000, Number(data.pollingIntervalMillis) || 8000);
+    ytPoll.current = window.setTimeout(() => {
+      void pullYoutube(false);
+    }, wait);
+  };
+
   const handleYoutube = async () => {
-    if (!ytUrl.trim()) return;
-    setIngestNote("Resolving YouTube…");
+    if (ytConnected) {
+      stopYoutube();
+      setIngestNote("YouTube chat stopped.");
+      return;
+    }
+    ytOn.current = true;
+    window.localStorage.setItem("windwrtest.youtubeApiKey", ytKey.trim());
+    ytSeen.current = new Set();
+    ytChatId.current = "";
+    ytPage.current = "";
+    setYtConnected(true);
+    setIngestNote("Connecting YouTube live chat…");
     try {
-      const res = await fetch("/api/live/chat/youtube", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: ytUrl.trim() }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setIngestNote(data.message || data.error || "YouTube resolve failed.");
-        return;
-      }
-      setIngestNote(
-        data.isLive
-          ? `Live now: ${data.title} · chat ${data.activeLiveChatId ? "ready" : "missing"}`
-          : `Video found, not currently live: ${data.title || data.videoId}`
-      );
+      await pullYoutube(true);
     } catch {
       setIngestNote("YouTube resolve failed.");
+      stopYoutube();
     }
   };
+
+  const applyAgent = async (agent: StudioAgent) => {
+    setSelectedAgentId(agent.id);
+    setAgentName(agent.name);
+    if (agent.persona) setSystemPrompt(agent.persona);
+    const body = modelUrl(agent);
+    if (body) {
+      setVrmUrl(body);
+      setIngestNote(`Loaded ${agent.name} body.`);
+    } else {
+      setIngestNote(`${agent.name} has no .vrm or .glb. Pick a sample or paste a model URL.`);
+    }
+    if (agent.tokenMint) {
+      setPumpToken(agent.tokenMint);
+      void handleFetchPumpToken(agent.tokenMint);
+    }
+    const token = getToken();
+    try {
+      const res = await fetch(`/api/agents/${agent.id}/live`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      const live = data.live || {};
+      if (typeof live.youtubeLiveUrl === "string") setYtUrl(live.youtubeLiveUrl);
+      if (!body && typeof live.vrmUrl === "string" && live.vrmUrl) setVrmUrl(live.vrmUrl);
+      if (!agent.tokenMint && typeof live.pumpMint === "string" && live.pumpMint) {
+        setPumpToken(live.pumpMint);
+      }
+      if (live.llmProvider) setLlmProvider(live.llmProvider);
+      if (live.ttsProvider) setTtsProvider(live.ttsProvider);
+    } catch {
+      /* agent name and body already applied */
+    }
+  };
+
+  useEffect(() => {
+    const fetchAgents = async () => {
+      const token = getToken();
+      if (!token) return;
+      try {
+        const res = await fetch("/api/agents", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        if (data.agents && Array.isArray(data.agents) && data.agents.length > 0) {
+          setRegisteredAgents(data.agents);
+          await applyAgent(data.agents[0]);
+        }
+      } catch (err) {
+        console.warn("Failed to fetch registered agents:", err);
+      }
+    };
+    void fetchAgents();
+    return () => {
+      if (ytPoll.current) window.clearTimeout(ytPoll.current);
+    };
+    // load once when the studio opens
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleSendMessage = async () => {
     if (!userChatInput.trim()) return;
@@ -401,10 +518,7 @@ export default function VrmStudioPage() {
                   value={selectedAgentId}
                   onChange={(e) => {
                     const agent = registeredAgents.find((a) => a.id === e.target.value);
-                    if (agent) {
-                      setSelectedAgentId(agent.id);
-                      setAgentName(agent.name);
-                    }
+                    if (agent) void applyAgent(agent);
                   }}
                   className="w-full bg-slate-900 border border-cyan-500/30 rounded p-2 text-xs font-mono text-white focus:outline-none focus:border-cyan-400"
                 >
@@ -585,6 +699,19 @@ export default function VrmStudioPage() {
               </div>
 
               <div>
+                <label className="text-[10px] text-slate-400">Your YouTube Data API key</label>
+                <input
+                  type="password"
+                  placeholder="AIza... from your Google Cloud project"
+                  value={ytKey}
+                  onChange={(e) => setYtKey(e.target.value)}
+                  className="w-full bg-slate-900 border border-cyan-500/30 rounded p-1.5 text-xs font-mono text-white mt-1"
+                />
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Stays in this browser. Vercel does not need a shared key.
+                </p>
+              </div>
+              <div>
                 <label className="text-[10px] text-slate-400">YouTube Live URL</label>
                 <div className="flex gap-2 mt-1">
                   <input
@@ -599,7 +726,7 @@ export default function VrmStudioPage() {
                     onClick={handleYoutube}
                     className="bg-red-600 hover:bg-red-500 text-white px-3 rounded text-xs font-bold uppercase"
                   >
-                    Resolve
+                    {ytConnected ? "Stop" : "Connect"}
                   </button>
                 </div>
               </div>

@@ -33,6 +33,7 @@ export const agents = sqliteTable("agents", {
   avatarUrl: text("avatar_url"),
   avatarGlbUrl: text("avatar_glb_url"),
   avatarPrompt: text("avatar_prompt"),
+  liveConfig: text("live_config"),
   tokenMint: text("token_mint"),
   createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
   updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),

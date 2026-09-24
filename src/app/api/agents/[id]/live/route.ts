@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getBearerUser } from "@/lib/auth";
-import { db } from "@/db/client";
+import { db, ensureDb } from "@/db/client";
 import { agents } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { registryGetAgent, registryPutAgent } from "@/lib/registry-upstash";
@@ -9,6 +9,7 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  await ensureDb();
   const { id } = await params;
   if (!id) return NextResponse.json({ error: "missing_id" }, { status: 400 });
 
@@ -18,17 +19,19 @@ export async function GET(
   });
 
   if (dbAgent) {
-    let liveConfig = {};
+    let liveConfig: Record<string, unknown> = {};
+    const raw = dbAgent.liveConfig || "";
     try {
-      if (dbAgent.avatarPrompt && dbAgent.avatarPrompt.startsWith("{")) {
-        liveConfig = JSON.parse(dbAgent.avatarPrompt);
-      }
+      if (raw.startsWith("{")) liveConfig = JSON.parse(raw);
     } catch {
-      /* fallback */
+      /* keep empty */
     }
     return NextResponse.json({
       agentId: id,
       name: dbAgent.name,
+      persona: dbAgent.persona,
+      avatarGlbUrl: dbAgent.avatarGlbUrl,
+      avatarUrl: dbAgent.avatarUrl,
       tokenMint: dbAgent.tokenMint,
       live: liveConfig,
     });
@@ -51,6 +54,7 @@ export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  await ensureDb();
   const user = await getBearerUser(req);
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
@@ -68,10 +72,15 @@ export async function PUT(
       return NextResponse.json({ error: "forbidden" }, { status: 403 });
     }
 
-    const liveJson = JSON.stringify(body);
+    const safe = { ...body };
+    delete safe.apiKey;
+    delete safe.youtubeApiKey;
+    delete safe.llmApiKey;
+    delete safe.elevenLabsKey;
+    const liveJson = JSON.stringify(safe);
     await db
       .update(agents)
-      .set({ avatarPrompt: liveJson, updatedAt: new Date().toISOString() })
+      .set({ liveConfig: liveJson, updatedAt: new Date().toISOString() })
       .where(eq(agents.id, id));
 
     return NextResponse.json({ ok: true, agentId: id, live: body });

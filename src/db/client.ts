@@ -260,6 +260,9 @@ async function migrateAgentAvatarColumns() {
   if (!names.has("avatar_prompt")) {
     await client.execute("ALTER TABLE agents ADD COLUMN avatar_prompt TEXT");
   }
+  if (!names.has("live_config")) {
+    await client.execute("ALTER TABLE agents ADD COLUMN live_config TEXT");
+  }
 }
 
 async function backfillPublicAgentProfilesSql() {
