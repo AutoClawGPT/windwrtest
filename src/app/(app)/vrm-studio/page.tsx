@@ -74,6 +74,12 @@ export default function VrmStudioPage() {
   // Ingest stream state
   const [ytUrl, setYtUrl] = useState("");
   const [ytKey, setYtKey] = useState("");
+  const [streamKey, setStreamKey] = useState("");
+  const [motionText, setMotionText] = useState("");
+  const [desk, setDesk] = useState<"all" | "body" | "brain" | "youtube" | "pump" | "motion" | "drive">("all");
+  const lastSpeak = useRef("");
+  const show = (name: "body" | "brain" | "youtube" | "pump" | "motion" | "drive") =>
+    desk === "all" || desk === name;
   const [ytConnected, setYtConnected] = useState(false);
   const ytOn = useRef(false);
   const ytPoll = useRef<number | null>(null);
@@ -365,6 +371,31 @@ export default function VrmStudioPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (!selectedAgentId) return;
+    const timer = window.setInterval(async () => {
+      const token = getToken();
+      if (!token) return;
+      try {
+        const res = await fetch(`/api/live/speak?agentId=${encodeURIComponent(selectedAgentId)}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        const speak = data.speak;
+        if (!speak?.id || speak.id === lastSpeak.current) return;
+        lastSpeak.current = speak.id;
+        if (speak.expression) setExpression(speak.expression);
+        const stamp = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        setChatMessages((prev) => [...prev, { user: "AGENT", text: speak.text, time: stamp }]);
+        void speakText(speak.text);
+      } catch {
+        /* studio keeps running if the speak queue is quiet */
+      }
+    }, 2000);
+    return () => window.clearInterval(timer);
+  }, [selectedAgentId]);
+
   const handleSendMessage = async () => {
     if (!userChatInput.trim()) return;
     const text = userChatInput.trim();
@@ -531,8 +562,25 @@ export default function VrmStudioPage() {
               </div>
             )}
 
+            <div className="flex flex-wrap gap-1">
+              {(["all", "body", "brain", "youtube", "pump", "motion", "drive"] as const).map((name) => (
+                <button
+                  key={name}
+                  type="button"
+                  onClick={() => setDesk(name)}
+                  className={`px-2 py-1 rounded text-[10px] font-mono uppercase border ${
+                    desk === name
+                      ? "bg-cyan-500 text-black border-cyan-300"
+                      : "bg-slate-900 text-slate-300 border-cyan-500/20"
+                  }`}
+                >
+                  {name}
+                </button>
+              ))}
+            </div>
+
             {/* LLM Engine & Voice Settings Panel */}
-            <div className="space-y-2 border-t border-cyan-500/20 pt-3 bg-slate-900/60 p-2.5 rounded-lg">
+            <div className={`${show("brain") ? "" : "hidden "}space-y-2 border-t border-cyan-500/20 pt-3 bg-slate-900/60 p-2.5 rounded-lg`}>
               <div className="text-xs font-mono text-amber-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
                 <Cpu className="w-3.5 h-3.5" /> Brain & Voice Settings
               </div>
@@ -600,7 +648,7 @@ export default function VrmStudioPage() {
             </div>
 
             {/* Model Avatar Gallery Picker */}
-            <div className="space-y-2 border-t border-cyan-500/20 pt-3">
+            <div className={`${show("body") ? "" : "hidden "}space-y-2 border-t border-cyan-500/20 pt-3`}>
               <label className="text-xs font-mono text-cyan-300 flex items-center gap-1">
                 <Sparkles className="w-3.5 h-3.5" /> 3D Avatar Model Presets
               </label>
@@ -645,7 +693,7 @@ export default function VrmStudioPage() {
             </div>
 
             {/* Expression Controls */}
-            <div className="space-y-2 border-t border-cyan-500/20 pt-3">
+            <div className={`${show("body") ? "" : "hidden "}space-y-2 border-t border-cyan-500/20 pt-3`}>
               <label className="text-xs font-mono text-cyan-300 flex items-center gap-1">
                 <Smile className="w-3.5 h-3.5" /> Expression Preset
               </label>
@@ -667,12 +715,12 @@ export default function VrmStudioPage() {
             </div>
 
             {/* Ingest Links: YouTube / Pump.fun */}
-            <div className="space-y-3 border-t border-cyan-500/20 pt-3">
+            <div className={`${show("pump") || show("youtube") ? "" : "hidden "}space-y-3 border-t border-cyan-500/20 pt-3`}>
               <label className="text-xs font-mono text-amber-400 flex items-center gap-1">
                 <Globe className="w-3.5 h-3.5" /> Stream Ingest Integrations
               </label>
 
-              <div>
+              <div className={show("pump") ? "" : "hidden"}>
                 <label className="text-[10px] text-slate-400">pump.fun Contract / Mint Address</label>
                 <div className="flex gap-2 mt-1">
                   <input
@@ -696,9 +744,25 @@ export default function VrmStudioPage() {
                     )}
                   </button>
                 </div>
+                <div className="mt-2 rounded border border-amber-500/30 bg-black/40 p-2 text-[10px] font-mono text-slate-300 space-y-1">
+                  <div className="text-amber-300">Go live on pump.fun</div>
+                  <div>1. Open the coin, then Livestream, then Broadcast.</div>
+                  <div>2. Choose Share this tab. This page is the camera.</div>
+                  <button
+                    type="button"
+                    className="mt-1 bg-amber-500 text-black px-2 py-1 rounded font-bold"
+                    onClick={() => {
+                      const link = `${window.location.origin}/vrm-studio`;
+                      void navigator.clipboard.writeText(link);
+                      setIngestNote(`Copied ${link}`);
+                    }}
+                  >
+                    Copy studio link
+                  </button>
+                </div>
               </div>
 
-              <div>
+              <div className={`${show("youtube") ? "" : "hidden "}space-y-2`}>
                 <label className="text-[10px] text-slate-400">Your YouTube Data API key</label>
                 <input
                   type="password"
@@ -707,13 +771,11 @@ export default function VrmStudioPage() {
                   onChange={(e) => setYtKey(e.target.value)}
                   className="w-full bg-slate-900 border border-cyan-500/30 rounded p-1.5 text-xs font-mono text-white mt-1"
                 />
-                <p className="text-[10px] text-slate-500 mt-1">
-                  Stays in this browser. Vercel does not need a shared key.
+                <p className="text-[10px] text-slate-500">
+                  Chat key stays in this browser. Vercel does not keep it.
                 </p>
-              </div>
-              <div>
                 <label className="text-[10px] text-slate-400">YouTube Live URL</label>
-                <div className="flex gap-2 mt-1">
+                <div className="flex gap-2">
                   <input
                     type="text"
                     placeholder="https://youtube.com/watch?v=..."
@@ -729,10 +791,78 @@ export default function VrmStudioPage() {
                     {ytConnected ? "Stop" : "Connect"}
                   </button>
                 </div>
+                <label className="text-[10px] text-slate-400">YouTube stream key (RTMP go-live)</label>
+                <input
+                  type="password"
+                  placeholder="From YouTube Studio → Go live → Stream key"
+                  value={streamKey}
+                  onChange={(e) => setStreamKey(e.target.value)}
+                  className="w-full bg-slate-900 border border-cyan-500/30 rounded p-1.5 text-xs font-mono text-white"
+                />
+                <button
+                  type="button"
+                  className="bg-red-700 text-white px-2 py-1 rounded text-[10px] font-mono"
+                  onClick={() => {
+                    const key = streamKey.trim() || "YOUR_STREAM_KEY";
+                    const cmd = `ffmpeg -re -f x11grab -video_size 1920x1080 -framerate 30 -i :99 -f lavfi -i anullsrc=r=44100:cl=stereo -c:v libx264 -preset veryfast -tune zerolatency -b:v 4500k -maxrate 4500k -bufsize 9000k -pix_fmt yuv420p -g 60 -c:a aac -b:a 128k -f flv "rtmp://a.rtmp.youtube.com/live2/${key}"`;
+                    void navigator.clipboard.writeText(cmd);
+                    setIngestNote("Copied the YouTube RTMP ffmpeg command. Paste your own stream key first.");
+                  }}
+                >
+                  Copy RTMP command
+                </button>
               </div>
               {ingestNote && (
                 <p className="text-[11px] font-mono text-slate-300 leading-snug">{ingestNote}</p>
               )}
+            </div>
+
+            <div className={`${show("motion") ? "" : "hidden "}space-y-2 border-t border-cyan-500/20 pt-3`}>
+              <label className="text-xs font-mono text-cyan-300">Motion from text</label>
+              <p className="text-[10px] text-slate-500 font-mono">
+                Same idea as text-to-vrma: type wave, jump, happy, sad, or angry. Full NVIDIA motion files stay in that desktop app.
+              </p>
+              <div className="flex gap-2">
+                <input
+                  value={motionText}
+                  onChange={(e) => setMotionText(e.target.value)}
+                  placeholder="wave"
+                  className="flex-1 bg-slate-900 border border-cyan-500/30 rounded p-1.5 text-xs font-mono text-white"
+                />
+                <button
+                  type="button"
+                  className="bg-cyan-500 text-black px-3 rounded text-xs font-bold"
+                  onClick={() => {
+                    const word = motionText.toLowerCase();
+                    const next = word.includes("angry")
+                      ? "angry"
+                      : word.includes("sad")
+                        ? "sad"
+                        : word.includes("relax")
+                          ? "relaxed"
+                          : "happy";
+                    setExpression(next);
+                    setSpeaking(true);
+                    window.setTimeout(() => setSpeaking(false), 1600);
+                    setIngestNote(`Playing ${next} for “${motionText || "motion"}”.`);
+                  }}
+                >
+                  Play
+                </button>
+              </div>
+            </div>
+
+            <div className={`${show("drive") ? "" : "hidden "}space-y-2 border-t border-cyan-500/20 pt-3`}>
+              <label className="text-xs font-mono text-cyan-300">Agent speak</label>
+              <p className="text-[10px] text-slate-500 font-mono">
+                Same job as agent-vrm-mcp speak_text. Your logged-in agent posts text here and this page says it.
+              </p>
+              <code className="block text-[10px] font-mono text-slate-300 break-all">
+                POST /api/live/speak
+              </code>
+              <code className="block text-[10px] font-mono text-slate-400 break-all">
+                {`{ "agentId": "${selectedAgentId || "AGENT_ID"}", "text": "hello", "expression": "happy" }`}
+              </code>
             </div>
 
             {/* Live Chat & Voice Testing Panel */}
