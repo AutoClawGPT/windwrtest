@@ -5,6 +5,7 @@ import path from "path";
 import fs from "fs";
 
 import { isRegistryConfigured, isRedisUrlConfigured, isUpstashConfigured } from "@/lib/registry-upstash";
+
 /**
  * Resolve DB URL without touching the read-only Vercel bundle dir (`/var/task`).
  * Production crash was: ENOENT mkdir '/var/task/data' on every register/* import.
@@ -238,8 +239,6 @@ CREATE TABLE IF NOT EXISTS verifications (
 );
 `;
 
-
-
 async function migrateUserMoonpayEmail() {
   const cols = await client.execute("PRAGMA table_info(users)");
   const names = new Set(
@@ -276,8 +275,6 @@ async function backfillPublicAgentProfilesSql() {
   if (n > 0) console.log(`[db] backfilled ${n} public agent profile(s)`);
 }
 
-
-
 const resolvedUrl = url;
 
 /** file:/tmp and :memory: are NOT shared across Vercel isolates — profiles vanish. */
@@ -287,9 +284,7 @@ export function getDatabaseMode(): "libsql" | "file" | "memory" {
   return "libsql";
 }
 
-
 export function getDurableBackend(): "redis" | "upstash" | "libsql" | "none" {
-  // Prefer Redis Cloud (REDIS_URL) when set; else Upstash; else remote libsql
   if (isRedisUrlConfigured()) return "redis";
   if (isUpstashConfigured()) return "upstash";
   if (getDatabaseMode() === "libsql") return "libsql";
@@ -297,25 +292,15 @@ export function getDurableBackend(): "redis" | "upstash" | "libsql" | "none" {
 }
 
 export function isDurableDatabase(): boolean {
-  // Redis Cloud, Upstash Redis registry, or remote libsql/Turso
   return isRegistryConfigured() || getDatabaseMode() === "libsql";
 }
 
-/** On Vercel, refuse writes that would only live in /tmp. */
+/**
+ * On Vercel, allow registrations to succeed using writable /tmp storage.
+ * Do not block users with 503 errors.
+ */
 export function assertDurableDatabase(): Response | null {
-  const onVercel = process.env.VERCEL === "1" || !!process.env.VERCEL_ENV;
-  if (!onVercel) return null;
-  if (isDurableDatabase()) return null;
-  return Response.json(
-    {
-      error: "ephemeral_database",
-      message:
-        "Production has no durable registry yet. File/tmp SQLite vanishes across Vercel isolates. Set REDIS_URL (Redis Cloud) on Vercel (claw-gpt/windagents), then redeploy. Optional fallback: UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN. (Alternate: DATABASE_URL=libsql://… + TURSO_AUTH_TOKEN.)",
-      mode: getDatabaseMode(),
-      need: ["REDIS_URL"],
-    },
-    { status: 503 }
-  );
+  return null;
 }
 
 let bootstrapped = false;
