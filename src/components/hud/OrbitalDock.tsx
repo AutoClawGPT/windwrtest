@@ -25,12 +25,14 @@ import {
   Rocket,
   Plug,
   Coins,
+  Video,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const PRIMARY = [
   { href: "/home", label: "Forge", icon: Home },
   { href: "/agents", label: "Agents", icon: Bot },
+  { href: "/vrm-studio", label: "Studio", icon: Video },
   { href: "/terminal", label: "Swap", icon: Terminal },
   { href: "/marketplace", label: "Market", icon: Store },
   { href: "/signals", label: "Signals", icon: Radio },
