@@ -27,14 +27,14 @@ import { getToken } from "@/lib/client-auth";
 import { generateVtuberLlmReply, generateElevenLabsTtsAudio } from "@/lib/vtuber-llm";
 
 export default function VrmStudioPage() {
-  const [vrmUrl, setVrmUrl] = useState("/vrm/sample1.glb");
+  const [vrmUrl, setVrmUrl] = useState("/vrm/seed-san.vrm");
   const [customUrlInput, setCustomUrlInput] = useState("");
   const [chromaBg, setChromaBg] = useState(false);
   const [hideDock, setHideDock] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const [expression, setExpression] = useState("neutral");
   const [ttsEnabled, setTtsEnabled] = useState(true);
-  const [agentName, setAgentName] = useState("AeroVTuber Agent");
+  const [agentName, setAgentName] = useState("Studio");
 
   // Registered agents
   const [registeredAgents, setRegisteredAgents] = useState<{ id: string; name: string }[]>([]);
@@ -58,7 +58,8 @@ export default function VrmStudioPage() {
 
   // Ingest stream state
   const [ytUrl, setYtUrl] = useState("");
-  const [pumpToken, setPumpToken] = useState("2PENPmfgJfq6CG3k4byj4oWwHf8SerqakmYHMkUupump");
+  const [pumpToken, setPumpToken] = useState("");
+  const [ingestNote, setIngestNote] = useState("");
   const [fetchingPump, setFetchingPump] = useState(false);
   const [pumpData, setPumpData] = useState<{
     name?: string;
@@ -71,10 +72,7 @@ export default function VrmStudioPage() {
 
   const [chatMessages, setChatMessages] = useState<
     { user: string; text: string; time: string }[]
-  >([
-    { user: "crypto_fan", text: "LFG VTuber agent on pump.fun!", time: "12:00" },
-    { user: "sol_whale", text: "Is bonding curve close to graduation?", time: "12:01" },
-  ]);
+  >([]);
   const [userChatInput, setUserChatInput] = useState("");
 
   // Fetch registered agents
@@ -184,7 +182,7 @@ export default function VrmStudioPage() {
   };
 
   const formatMcap = (val: number | string | undefined | null) => {
-    if (val === undefined || val === null) return "Live";
+    if (val === undefined || val === null) return "unavailable";
     const num = typeof val === "number" ? val : parseFloat(String(val).replace(/[^0-9.]/g, ""));
     if (isNaN(num)) return typeof val === "string" ? val : "Live";
     if (num >= 1_000_000) return `$${(num / 1_000_000).toFixed(2)}M`;
@@ -200,28 +198,55 @@ export default function VrmStudioPage() {
       const data = await res.json();
       if (data.ok) {
         setPumpData(data);
-        if (data.name) setAgentName(`${data.name} VTuber`);
-        const announce = `Loaded token ${data.name || "Pump Token"} ($${data.symbol || "PUMP"}). We are live!`;
+        if (data.name) setAgentName(data.name);
+        const cap = formatMcap(data.usdMarketCap);
+        const announce = `${data.name} (${data.symbol}) loaded from ${data.source}. Market cap ${cap}.`;
+        setIngestNote(announce);
         setChatMessages((prev) => [
           ...prev,
           {
-            user: "SYSTEM",
+            user: "TOKEN",
             text: announce,
             time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
           },
         ]);
         speakText(announce);
+      } else {
+        const note = data.message || data.error || "Token lookup failed.";
+        setIngestNote(note);
+        setPumpData(null);
       }
     } catch (err) {
       console.error("Failed to fetch pump token:", err);
+      setIngestNote("Token lookup failed.");
     } finally {
       setFetchingPump(false);
     }
   };
 
-  useEffect(() => {
-    handleFetchPumpToken();
-  }, []);
+  const handleYoutube = async () => {
+    if (!ytUrl.trim()) return;
+    setIngestNote("Resolving YouTube…");
+    try {
+      const res = await fetch("/api/live/chat/youtube", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: ytUrl.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setIngestNote(data.message || data.error || "YouTube resolve failed.");
+        return;
+      }
+      setIngestNote(
+        data.isLive
+          ? `Live now: ${data.title} · chat ${data.activeLiveChatId ? "ready" : "missing"}`
+          : `Video found, not currently live: ${data.title || data.videoId}`
+      );
+    } catch {
+      setIngestNote("YouTube resolve failed.");
+    }
+  };
 
   const handleSendMessage = async () => {
     if (!userChatInput.trim()) return;
@@ -274,7 +299,7 @@ export default function VrmStudioPage() {
               </div>
               <div>
                 <div className="text-xs font-mono text-cyan-400 uppercase tracking-widest flex items-center gap-1">
-                  <Radio className="w-3 h-3" /> Live Studio Engine
+                  <Radio className="w-3 h-3" /> {pumpData ? "Token loaded" : "Studio"}
                 </div>
                 <div className="text-sm font-bold text-white tracking-wide">{agentName}</div>
               </div>
@@ -465,16 +490,27 @@ export default function VrmStudioPage() {
               <label className="text-xs font-mono text-cyan-300 flex items-center gap-1">
                 <Sparkles className="w-3.5 h-3.5" /> 3D Avatar Model Presets
               </label>
-              <select
-                value={vrmUrl}
-                onChange={(e) => setVrmUrl(e.target.value)}
-                className="w-full bg-slate-900 border border-cyan-500/30 rounded p-2 text-xs font-mono text-white focus:outline-none focus:border-cyan-400"
-              >
-                <option value="/vrm/sample1.glb">Avatar 1 (Avocado 3D Core)</option>
-                <option value="/vrm/sample2.glb">Avatar 2 (Duck 3D Mascot)</option>
-                <option value="/vrm/sample3.glb">Avatar 3 (Fox 3D Animated)</option>
-                <option value="/vrm/sample4.glb">Avatar 4 (Cesium Human 3D)</option>
-              </select>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  ["/vrm/seed-san.vrm", "Seed-san"],
+                  ["/vrm/twist.vrm", "Twist"],
+                  ["/vrm/avatar-a.vrm", "Avatar A"],
+                  ["/vrm/avatar-b.vrm", "Avatar B"],
+                ].map(([url, label]) => (
+                  <button
+                    key={url}
+                    type="button"
+                    onClick={() => setVrmUrl(url)}
+                    className={`p-2 rounded text-xs font-mono border ${
+                      vrmUrl === url
+                        ? "bg-cyan-500/20 border-cyan-400 text-cyan-200"
+                        : "bg-slate-900 border-cyan-500/20 text-slate-300"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
               <div className="flex gap-2 pt-1">
                 <input
                   type="text"
@@ -527,7 +563,7 @@ export default function VrmStudioPage() {
                 <div className="flex gap-2 mt-1">
                   <input
                     type="text"
-                    placeholder="Paste ...pump token address"
+                    placeholder="Mint ending in pump"
                     value={pumpToken}
                     onChange={(e) => setPumpToken(e.target.value)}
                     className="flex-1 bg-slate-900 border border-cyan-500/30 rounded p-1.5 text-xs font-mono text-white"
@@ -550,14 +586,26 @@ export default function VrmStudioPage() {
 
               <div>
                 <label className="text-[10px] text-slate-400">YouTube Live URL</label>
-                <input
-                  type="text"
-                  placeholder="https://youtube.com/watch?v=..."
-                  value={ytUrl}
-                  onChange={(e) => setYtUrl(e.target.value)}
-                  className="w-full bg-slate-900 border border-cyan-500/30 rounded p-1.5 text-xs font-mono text-white mt-1"
-                />
+                <div className="flex gap-2 mt-1">
+                  <input
+                    type="text"
+                    placeholder="https://youtube.com/watch?v=..."
+                    value={ytUrl}
+                    onChange={(e) => setYtUrl(e.target.value)}
+                    className="flex-1 bg-slate-900 border border-cyan-500/30 rounded p-1.5 text-xs font-mono text-white"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleYoutube}
+                    className="bg-red-600 hover:bg-red-500 text-white px-3 rounded text-xs font-bold uppercase"
+                  >
+                    Resolve
+                  </button>
+                </div>
               </div>
+              {ingestNote && (
+                <p className="text-[11px] font-mono text-slate-300 leading-snug">{ingestNote}</p>
+              )}
             </div>
 
             {/* Live Chat & Voice Testing Panel */}

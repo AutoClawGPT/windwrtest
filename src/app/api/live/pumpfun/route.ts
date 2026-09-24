@@ -1,52 +1,93 @@
 import { NextRequest, NextResponse } from "next/server";
 
+type Coin = {
+  ok: true;
+  mint: string;
+  name: string;
+  symbol: string;
+  description: string;
+  image: string | null;
+  usdMarketCap: number | null;
+  replyCount: number;
+  creator: string | null;
+  source: string;
+};
+
+async function fromPump(mint: string): Promise<Coin | null> {
+  const res = await fetch(`https://frontend-api-v3.pump.fun/coins/${mint}`, {
+    headers: {
+      Accept: "application/json",
+      "User-Agent": "windwrtest-studio",
+    },
+    cache: "no-store",
+  });
+  if (!res.ok) return null;
+  const data = await res.json();
+  if (!data?.mint && !data?.name) return null;
+  const cap = Number(data.usd_market_cap);
+  return {
+    ok: true,
+    mint,
+    name: data.name || "Unknown",
+    symbol: data.symbol || "",
+    description: data.description || "",
+    image: data.image_uri || null,
+    usdMarketCap: Number.isFinite(cap) ? cap : null,
+    replyCount: Number(data.reply_count) || 0,
+    creator: data.creator || null,
+    source: "pump.fun",
+  };
+}
+
+async function fromDex(mint: string): Promise<Coin | null> {
+  const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`, {
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+  if (!res.ok) return null;
+  const data = await res.json();
+  const pairs = Array.isArray(data.pairs) ? data.pairs : [];
+  if (!pairs.length) return null;
+  const pair = pairs.slice().sort((a: { liquidity?: { usd?: number } }, b: { liquidity?: { usd?: number } }) => {
+    return (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0);
+  })[0];
+  const base = pair.baseToken || {};
+  const cap = Number(pair.marketCap ?? pair.fdv);
+  return {
+    ok: true,
+    mint,
+    name: base.name || "Unknown",
+    symbol: base.symbol || "",
+    description: "",
+    image: pair.info?.imageUrl || null,
+    usdMarketCap: Number.isFinite(cap) ? cap : null,
+    replyCount: 0,
+    creator: null,
+    source: "dexscreener",
+  };
+}
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  const mint = searchParams.get("mint") || searchParams.get("address");
-
+  const mint = (searchParams.get("mint") || searchParams.get("address") || "").trim();
   if (!mint) {
-    return NextResponse.json({ error: "missing_mint_address" }, { status: 400 });
+    return NextResponse.json({ ok: false, error: "missing_mint_address" }, { status: 400 });
   }
-
-  const cleanMint = mint.trim();
 
   try {
-    // Attempt fetch from frontend-api.pump.fun
-    const res = await fetch(`https://frontend-api.pump.fun/coins/${cleanMint}`, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-        Accept: "application/json",
-      },
-    });
-
-    if (res.ok) {
-      const data = await res.json();
-      return NextResponse.json({
-        ok: true,
-        mint: cleanMint,
-        name: data.name || "Pump Token",
-        symbol: data.symbol || "PUMP",
-        description: data.description || "",
-        image: data.image_uri || data.metadata_uri || null,
-        usdMarketCap: data.usd_market_cap || null,
-        solAmount: data.v_sol_in_bonding_curve || null,
-        replyCount: data.reply_count || 0,
-        creator: data.creator || null,
-        source: "pump.fun",
-      });
-    }
+    const coin = (await fromPump(mint)) || (await fromDex(mint));
+    if (coin) return NextResponse.json(coin);
   } catch (err) {
-    console.warn("[pump.fun] Direct API fallback attempt:", err);
+    console.warn("[pump.fun] lookup failed", err);
   }
 
-  // Fallback to Solana RPC token metadata check
-  return NextResponse.json({
-    ok: true,
-    mint: cleanMint,
-    name: "Solana Pump Token",
-    symbol: cleanMint.slice(0, 4).toUpperCase() + "pump",
-    description: "Live pump.fun meme-coin agent stream",
-    usdMarketCap: "$12,450",
-    source: "solana-pump-pair",
-  });
+  return NextResponse.json(
+    {
+      ok: false,
+      error: "token_not_found",
+      mint,
+      message: "pump.fun and Dexscreener did not return this mint.",
+    },
+    { status: 404 }
+  );
 }

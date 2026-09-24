@@ -1,0 +1,5 @@
+seed-san.vrm and twist.vrm — VRM Consortium samples, VRM Public License 1.0
+https://github.com/vrm-c/vrm-specification/tree/master/samples
+
+avatar-a.vrm — VRoid AvatarSample_A
+avatar-b.vrm — VRoid AvatarSample_B, shipped with https://github.com/pixiv/ChatVRM

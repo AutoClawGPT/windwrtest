@@ -25,7 +25,7 @@ export async function generateVtuberLlmReply(
     systemPrompt || "You are an energetic, fun 3D AI VTuber streaming live on Solana and pump.fun! Keep replies under 25 words.";
 
   if (!apiKey) {
-    return `[VTuber Agent]: ${userMessage} — We are live on Solana & pump.fun!`;
+    return "No LLM key in the studio panel. Paste an OpenAI, OpenRouter, or Groq key, then send again.";
   }
 
   try {
@@ -69,7 +69,7 @@ export async function generateVtuberLlmReply(
     console.warn("[vtuber-llm] API call error, falling back:", err);
   }
 
-  return `[${config.provider.toUpperCase()} Agent]: Welcome to our live Solana stream! ${userMessage}`;
+  return "The LLM call failed. Check the provider, model, and key.";
 }
 
 export async function generateElevenLabsTtsAudio(
