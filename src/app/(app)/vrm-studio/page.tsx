@@ -61,11 +61,15 @@ export default function VrmStudioPage() {
   >("openai");
   const [llmApiKey, setLlmApiKey] = useState("");
   const [llmModel, setLlmModel] = useState("gpt-4o-mini");
+  const [llmBaseUrl, setLlmBaseUrl] = useState("https://api.openai.com/v1");
+  const [temperature, setTemperature] = useState(1);
+  const [edgeVoice, setEdgeVoice] = useState("en-US-AvaMultilingualNeural");
+  const [characterName, setCharacterName] = useState("");
   const [systemPrompt, setSystemPrompt] = useState(
     "You are an energetic, fun 3D AI VTuber streaming live on Solana & pump.fun!"
   );
 
-  const [ttsProvider, setTtsProvider] = useState<"webspeech" | "elevenlabs">("webspeech");
+  const [ttsProvider, setTtsProvider] = useState<"webspeech" | "elevenlabs" | "edge">("edge");
   const [elevenLabsKey, setElevenLabsKey] = useState("");
   const [elevenLabsVoiceId, setElevenLabsVoiceId] = useState("21m00Tcm4TlvDq8ikWAM");
   const [savingLiveConfig, setSavingLiveConfig] = useState(false);
@@ -152,6 +156,28 @@ export default function VrmStudioPage() {
   // Speak text using Web Speech API or ElevenLabs TTS
   const speakText = async (text: string) => {
     if (!ttsEnabled || typeof window === "undefined") return;
+
+    if (ttsProvider === "edge") {
+      try {
+        const res = await fetch("/api/live/tts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text, voice: edgeVoice }),
+        });
+        if (res.ok) {
+          const blob = await res.blob();
+          const url = URL.createObjectURL(blob);
+          const audio = new Audio(url);
+          setSpeaking(true);
+          audio.onended = () => setSpeaking(false);
+          audio.onerror = () => setSpeaking(false);
+          await audio.play();
+          return;
+        }
+      } catch (err) {
+        console.warn("Edge TTS failed, using Web Speech", err);
+      }
+    }
 
     if (ttsProvider === "elevenlabs" && elevenLabsKey) {
       const audioBuffer = await generateElevenLabsTtsAudio(
@@ -412,6 +438,8 @@ export default function VrmStudioPage() {
       provider: llmProvider,
       apiKey: llmApiKey,
       model: llmModel,
+      baseUrl: llmBaseUrl,
+      temperature,
       systemPrompt,
     });
 
@@ -607,12 +635,51 @@ export default function VrmStudioPage() {
                     onChange={(e) => setTtsProvider(e.target.value as any)}
                     className="w-full bg-slate-950 border border-slate-700 rounded p-1 text-xs text-white mt-0.5"
                   >
-                    <option value="webspeech">Web Speech (Free)</option>
+                    <option value="edge">Edge TTS (free)</option>
+                    <option value="webspeech">Web Speech</option>
                     <option value="elevenlabs">ElevenLabs</option>
                   </select>
                 </div>
               </div>
 
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] text-slate-400">LLM base URL</label>
+                  <input
+                    value={llmBaseUrl}
+                    onChange={(e) => setLlmBaseUrl(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded p-1.5 text-xs text-white mt-0.5"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-400">Model</label>
+                  <input
+                    value={llmModel}
+                    onChange={(e) => setLlmModel(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded p-1.5 text-xs text-white mt-0.5"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-[10px] text-slate-400">Character name</label>
+                <input
+                  value={characterName}
+                  onChange={(e) => {
+                    setCharacterName(e.target.value);
+                    if (e.target.value.trim()) setAgentName(e.target.value.trim());
+                  }}
+                  placeholder="Name on the stream"
+                  className="w-full bg-slate-950 border border-slate-700 rounded p-1.5 text-xs text-white mt-0.5"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] text-slate-400">Edge voice</label>
+                <input
+                  value={edgeVoice}
+                  onChange={(e) => setEdgeVoice(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded p-1.5 text-xs text-white mt-0.5"
+                />
+              </div>
               <div>
                 <label className="text-[10px] text-slate-400">LLM API Key</label>
                 <input
@@ -650,8 +717,11 @@ export default function VrmStudioPage() {
             {/* Model Avatar Gallery Picker */}
             <div className={`${show("body") ? "" : "hidden "}space-y-2 border-t border-cyan-500/20 pt-3`}>
               <label className="text-xs font-mono text-cyan-300 flex items-center gap-1">
-                <Sparkles className="w-3.5 h-3.5" /> 3D Avatar Model Presets
+                <Sparkles className="w-3.5 h-3.5" /> Your model URL
               </label>
+              <p className="text-[10px] text-slate-500 font-mono">
+                Paste the .vrm or .glb for this agent. The four buttons below are only spare samples.
+              </p>
               <div className="grid grid-cols-2 gap-2">
                 {[
                   ["/vrm/seed-san.vrm", "Seed-san"],

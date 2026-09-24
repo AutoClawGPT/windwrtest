@@ -6,6 +6,8 @@ export interface VtuberLlmConfig {
   provider: "openai" | "openrouter" | "groq" | "anthropic" | "deepseek";
   apiKey?: string;
   model?: string;
+  baseUrl?: string;
+  temperature?: number;
   systemPrompt?: string;
 }
 
@@ -19,7 +21,7 @@ export async function generateVtuberLlmReply(
   userMessage: string,
   config: VtuberLlmConfig
 ): Promise<string> {
-  const { provider, apiKey, model, systemPrompt } = config;
+  const { provider, apiKey, model, baseUrl, temperature, systemPrompt } = config;
 
   const defaultPrompt =
     systemPrompt || "You are an energetic, fun 3D AI VTuber streaming live on Solana and pump.fun! Keep replies under 25 words.";
@@ -29,19 +31,16 @@ export async function generateVtuberLlmReply(
   }
 
   try {
-    let endpoint = "https://api.openai.com/v1/chat/completions";
-    let targetModel = model || "gpt-4o-mini";
-
-    if (provider === "openrouter") {
-      endpoint = "https://openrouter.ai/api/v1/chat/completions";
-      targetModel = model || "openai/gpt-4o-mini";
-    } else if (provider === "groq") {
-      endpoint = "https://api.groq.com/openai/v1/chat/completions";
-      targetModel = model || "llama-3.3-70b-versatile";
-    } else if (provider === "deepseek") {
-      endpoint = "https://api.deepseek.com/v1/chat/completions";
-      targetModel = model || "deepseek-chat";
-    }
+    const roots: Record<string, string> = {
+      openai: "https://api.openai.com/v1",
+      openrouter: "https://openrouter.ai/api/v1",
+      groq: "https://api.groq.com/openai/v1",
+      deepseek: "https://api.deepseek.com/v1",
+      anthropic: "https://api.anthropic.com/v1",
+    };
+    const root = (baseUrl || roots[provider] || roots.openai).replace(/\/$/, "");
+    const endpoint = root.endsWith("/chat/completions") ? root : `${root}/chat/completions`;
+    const targetModel = model || "gpt-4o-mini";
 
     const res = await fetch(endpoint, {
       method: "POST",
@@ -56,7 +55,7 @@ export async function generateVtuberLlmReply(
           { role: "user", content: userMessage },
         ],
         max_tokens: 100,
-        temperature: 0.7,
+        temperature: typeof temperature === "number" ? temperature : 1,
       }),
     });
 
