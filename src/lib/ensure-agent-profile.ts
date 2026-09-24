@@ -78,6 +78,7 @@ export function publicAgentFromRegistry(remote: {
     avatarUrl: null,
     avatarGlbUrl: remote.avatarGlbUrl ?? null,
     avatarPrompt: remote.avatarPrompt ?? null,
+    liveConfig: null,
     tokenMint: null,
     createdAt: remote.createdAt || now,
     updatedAt: remote.updatedAt || now,
