@@ -1,0 +1,19 @@
+[
+  {
+    "name": "haru",
+    "description": "Official Live2D Cubism sample, Haru the greeter.",
+    "url": "/live2d-models/haru/haru_greeter_t05.model3.json",
+    "kScale": 0.4,
+    "initialXshift": 0,
+    "initialYshift": 0,
+    "idleMotionGroupName": "Idle",
+    "defaultEmotion": 0,
+    "emotionMap": {
+      "neutral": 0,
+      "joy": 1,
+      "anger": 2,
+      "sadness": 3,
+      "surprise": 4
+    }
+  }
+]

@@ -1,7 +1,13 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import dynamic from "next/dynamic";
 import { VrmStudio } from "@/components/vrm/VrmStudio";
+
+const Live2DStage = dynamic(
+  () => import("@/components/avatar/Live2DStage").then((mod) => mod.Live2DStage),
+  { ssr: false }
+);
 import { AppShell } from "@/components/hud/AppShell";
 import {
   Video,
@@ -42,7 +48,7 @@ function modelUrl(agent: StudioAgent): string | null {
 }
 
 export default function VrmStudioPage() {
-  const [vrmUrl, setVrmUrl] = useState("/vrm/rose.vrm");
+  const [vrmUrl, setVrmUrl] = useState("live2d:haru");
   const [vrmaUrl, setVrmaUrl] = useState("");
   const [customUrlInput, setCustomUrlInput] = useState("");
   const [chromaBg, setChromaBg] = useState(false);
@@ -460,13 +466,17 @@ export default function VrmStudioPage() {
       <div className="relative w-full h-[calc(100vh-80px)] flex flex-col lg:flex-row overflow-hidden bg-black/90">
         {/* Main 3D Stage / Studio viewport */}
         <div className="relative flex-1 h-full min-h-[450px] flex items-center justify-center border-r border-cyan-500/20">
-          <VrmStudio
-            vrmUrl={vrmUrl}
-            vrmaUrl={vrmaUrl}
-            chromaBg={chromaBg}
-            speaking={speaking}
-            expression={expression}
-          />
+          {vrmUrl === "live2d:haru" ? (
+            <Live2DStage speaking={speaking} />
+          ) : (
+            <VrmStudio
+              vrmUrl={vrmUrl}
+              vrmaUrl={vrmaUrl}
+              chromaBg={chromaBg}
+              speaking={speaking}
+              expression={expression}
+            />
+          )}
 
           {/* Nameplate Overlay */}
           {!hideDock && (
@@ -726,6 +736,7 @@ export default function VrmStudioPage() {
               </p>
               <div className="grid grid-cols-2 gap-2">
                 {[
+                  ["live2d:haru", "Haru"],
                   ["/vrm/rose.vrm", "Rose"],
                   ["/vrm/robert.vrm", "Robert"],
                   ["/vrm/polydancer.vrm", "Polydancer"],
