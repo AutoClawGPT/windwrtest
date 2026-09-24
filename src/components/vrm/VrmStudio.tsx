@@ -80,6 +80,19 @@ export function VrmStudio({
       renderer.setSize(w, h, false);
     };
 
+    const frameObject = (object: THREE.Object3D) => {
+      object.updateMatrixWorld(true);
+      const box = new THREE.Box3().setFromObject(object);
+      const size = box.getSize(new THREE.Vector3());
+      const center = box.getCenter(new THREE.Vector3());
+      const span = Math.max(size.x, size.y, size.z, 0.2);
+      camera.position.set(center.x, center.y, center.z + span * 1.6);
+      camera.near = span / 100;
+      camera.far = span * 40;
+      camera.lookAt(center);
+      camera.updateProjectionMatrix();
+    };
+
     // Lighting
     const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
     scene.add(ambientLight);
@@ -125,9 +138,7 @@ export function VrmStudio({
           scene.add(vrm.scene);
           currentVrmRef.current = vrm;
           currentModelSceneRef.current = vrm.scene;
-          camera.position.set(0, 1, 5);
-          camera.lookAt(0, 1, 0);
-          camera.updateProjectionMatrix();
+          frameObject(vrm.scene);
           if (vrmaUrl) {
             const animLoader = new GLTFLoader();
             animLoader.register((parser) => new VRMAnimationLoaderPlugin(parser));
@@ -151,11 +162,12 @@ export function VrmStudio({
 
           modelScene.scale.set(scale, scale, scale);
           modelScene.position.sub(center.multiplyScalar(scale));
-          modelScene.position.y += 0.8;
+          modelScene.updateMatrixWorld(true);
 
           scene.add(modelScene);
           currentModelSceneRef.current = modelScene;
           currentVrmRef.current = null;
+          frameObject(modelScene);
         }
 
         fit();
@@ -234,13 +246,7 @@ export function VrmStudio({
           }
         }
       } else if (model) {
-        // Fallback GLB idle motion
         model.rotation.y = Math.sin(time * 0.8) * 0.15;
-        if (currentState.speaking) {
-          model.position.y = 0.8 + Math.sin(time * 12) * 0.04;
-        } else {
-          model.position.y = 0.8 + Math.sin(time * 2) * 0.01;
-        }
       }
 
       renderer.render(scene, camera);
