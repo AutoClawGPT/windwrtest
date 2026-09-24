@@ -42,7 +42,8 @@ function modelUrl(agent: StudioAgent): string | null {
 }
 
 export default function VrmStudioPage() {
-  const [vrmUrl, setVrmUrl] = useState("/vrm/seed-san.vrm");
+  const [vrmUrl, setVrmUrl] = useState("/vrm/twist.vrm");
+  const [vrmaUrl, setVrmaUrl] = useState("/vrm/test.vrma");
   const [customUrlInput, setCustomUrlInput] = useState("");
   const [chromaBg, setChromaBg] = useState(false);
   const [hideDock, setHideDock] = useState(false);
@@ -461,6 +462,7 @@ export default function VrmStudioPage() {
         <div className="relative flex-1 h-full min-h-[450px] flex items-center justify-center border-r border-cyan-500/20">
           <VrmStudio
             vrmUrl={vrmUrl}
+            vrmaUrl={vrmaUrl}
             chromaBg={chromaBg}
             speaking={speaking}
             expression={expression}
@@ -912,9 +914,10 @@ export default function VrmStudioPage() {
                           ? "relaxed"
                           : "happy";
                     setExpression(next);
+                    setVrmaUrl("/vrm/test.vrma");
                     setSpeaking(true);
                     window.setTimeout(() => setSpeaking(false), 1600);
-                    setIngestNote(`Playing ${next} for “${motionText || "motion"}”.`);
+                    setIngestNote(`Playing the three-vrm-animation clip with ${next}.`);
                   }}
                 >
                   Play

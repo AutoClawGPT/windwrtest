@@ -4,9 +4,15 @@ import React, { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { VRM, VRMLoaderPlugin, VRMUtils } from "@pixiv/three-vrm";
+import {
+  createVRMAnimationClip,
+  VRMAnimationLoaderPlugin,
+  VRMLookAtQuaternionProxy,
+} from "@pixiv/three-vrm-animation";
 
 interface VrmStudioProps {
   vrmUrl?: string;
+  vrmaUrl?: string;
   chromaBg?: boolean;
   speaking?: boolean;
   expression?: string;
@@ -15,7 +21,8 @@ interface VrmStudioProps {
 }
 
 export function VrmStudio({
-  vrmUrl = "/vrm/sample1.glb",
+  vrmUrl = "/vrm/seed-san.vrm",
+  vrmaUrl = "",
   chromaBg = false,
   speaking = false,
   expression = "neutral",
@@ -27,6 +34,7 @@ export function VrmStudio({
   const currentModelSceneRef = useRef<THREE.Object3D | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const animationFrameRef = useRef<number | null>(null);
+  const mixerRef = useRef<THREE.AnimationMixer | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -76,7 +84,7 @@ export function VrmStudio({
     const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
     scene.add(ambientLight);
 
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
+    const dirLight = new THREE.DirectionalLight(0xffffff, Math.PI);
     dirLight.position.set(1, 2, 1).normalize();
     scene.add(dirLight);
 
@@ -101,12 +109,37 @@ export function VrmStudio({
         }
 
         const vrm = gltf.userData.vrm as VRM | undefined;
-        const subject = vrm ? vrm.scene : gltf.scene;
         if (vrm) {
+          VRMUtils.removeUnnecessaryVertices(gltf.scene);
+          VRMUtils.combineSkeletons(gltf.scene);
+          VRMUtils.combineMorphs(vrm);
           VRMUtils.rotateVRM0(vrm);
+          vrm.scene.traverse((obj) => {
+            obj.frustumCulled = false;
+          });
+          if (vrm.lookAt) {
+            const lookAtQuatProxy = new VRMLookAtQuaternionProxy(vrm.lookAt);
+            lookAtQuatProxy.name = "lookAtQuaternionProxy";
+            vrm.scene.add(lookAtQuatProxy);
+          }
           scene.add(vrm.scene);
           currentVrmRef.current = vrm;
           currentModelSceneRef.current = vrm.scene;
+          camera.position.set(0, 1, 5);
+          camera.lookAt(0, 1, 0);
+          camera.updateProjectionMatrix();
+          if (vrmaUrl) {
+            const animLoader = new GLTFLoader();
+            animLoader.register((parser) => new VRMAnimationLoaderPlugin(parser));
+            animLoader.load(vrmaUrl, (animGltf) => {
+              const clipSource = animGltf.userData.vrmAnimations?.[0];
+              if (!clipSource || !currentVrmRef.current) return;
+              const clip = createVRMAnimationClip(clipSource, currentVrmRef.current);
+              const mixer = new THREE.AnimationMixer(currentVrmRef.current.scene);
+              mixer.clipAction(clip).setLoop(THREE.LoopRepeat, Infinity).play();
+              mixerRef.current = mixer;
+            });
+          }
         } else {
           // Fallback: Standard GLB 3D model
           const modelScene = gltf.scene;
@@ -125,15 +158,6 @@ export function VrmStudio({
           currentVrmRef.current = null;
         }
 
-        const box = new THREE.Box3().setFromObject(subject);
-        const size = box.getSize(new THREE.Vector3());
-        const center = box.getCenter(new THREE.Vector3());
-        const height = Math.max(size.y, 0.5);
-        camera.position.set(center.x, center.y, center.z + height * 1.6);
-        camera.near = 0.01;
-        camera.far = Math.max(50, height * 20);
-        camera.lookAt(center);
-        camera.updateProjectionMatrix();
         fit();
 
         setLoading(false);
@@ -171,6 +195,7 @@ export function VrmStudio({
       const currentState = stateRef.current;
 
       if (vrm) {
+        mixerRef.current?.update(delta);
         vrm.update(delta);
 
         if (vrm.humanoid) {
@@ -244,7 +269,7 @@ export function VrmStudio({
       }
       renderer.dispose();
     };
-  }, [vrmUrl, onLoaded]);
+  }, [vrmUrl, vrmaUrl, onLoaded]);
 
   return (
     <div className="relative w-full h-full min-h-[500px]" ref={mountRef}>
