@@ -41,6 +41,7 @@ export function syntheticAgentRow(opts: {
     avatarUrl: null,
     avatarGlbUrl: opts.avatarGlbUrl ?? null,
     avatarPrompt: opts.avatarPrompt ?? null,
+    liveConfig: null,
     tokenMint: null,
     createdAt: opts.createdAt || now,
     updatedAt: opts.updatedAt || now,
