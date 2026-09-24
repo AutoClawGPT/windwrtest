@@ -81,14 +81,19 @@ export function VrmStudio({
     };
 
     const frameObject = (object: THREE.Object3D) => {
+      fit();
       object.updateMatrixWorld(true);
       const box = new THREE.Box3().setFromObject(object);
       const size = box.getSize(new THREE.Vector3());
       const center = box.getCenter(new THREE.Vector3());
-      const span = Math.max(size.x, size.y, size.z, 0.2);
-      camera.position.set(center.x, center.y, center.z + span * 1.6);
-      camera.near = span / 100;
-      camera.far = span * 40;
+      const vFov = (camera.fov * Math.PI) / 180;
+      const hFov = 2 * Math.atan(Math.tan(vFov / 2) * Math.max(camera.aspect, 0.5));
+      const distY = size.y / 2 / Math.tan(vFov / 2);
+      const distX = size.x / 2 / Math.tan(hFov / 2);
+      const dist = Math.max(distX, distY, size.z, 0.2) * 1.25;
+      camera.position.set(center.x, center.y, center.z + dist);
+      camera.near = Math.max(dist / 200, 0.01);
+      camera.far = dist * 20;
       camera.lookAt(center);
       camera.updateProjectionMatrix();
     };
