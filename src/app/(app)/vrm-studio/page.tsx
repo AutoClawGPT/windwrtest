@@ -19,8 +19,12 @@ import {
   VolumeX,
   Bot,
   Key,
+  Cpu,
+  Save,
+  CheckCircle2,
 } from "lucide-react";
 import { getToken } from "@/lib/client-auth";
+import { generateVtuberLlmReply, generateElevenLabsTtsAudio } from "@/lib/vtuber-llm";
 
 export default function VrmStudioPage() {
   const [vrmUrl, setVrmUrl] = useState("/vrm/sample1.glb");
@@ -32,12 +36,27 @@ export default function VrmStudioPage() {
   const [ttsEnabled, setTtsEnabled] = useState(true);
   const [agentName, setAgentName] = useState("AeroVTuber Agent");
 
+  // Registered agents
   const [registeredAgents, setRegisteredAgents] = useState<{ id: string; name: string }[]>([]);
   const [selectedAgentId, setSelectedAgentId] = useState("");
 
-  const [elevenLabsKey, setElevenLabsKey] = useState("");
-  const [openAiKey, setOpenAiKey] = useState("");
+  // LLM & Voice Credentials Configuration
+  const [llmProvider, setLlmProvider] = useState<
+    "openai" | "openrouter" | "groq" | "anthropic" | "deepseek"
+  >("openai");
+  const [llmApiKey, setLlmApiKey] = useState("");
+  const [llmModel, setLlmModel] = useState("gpt-4o-mini");
+  const [systemPrompt, setSystemPrompt] = useState(
+    "You are an energetic, fun 3D AI VTuber streaming live on Solana & pump.fun!"
+  );
 
+  const [ttsProvider, setTtsProvider] = useState<"webspeech" | "elevenlabs">("webspeech");
+  const [elevenLabsKey, setElevenLabsKey] = useState("");
+  const [elevenLabsVoiceId, setElevenLabsVoiceId] = useState("21m00Tcm4TlvDq8ikWAM");
+  const [savingLiveConfig, setSavingLiveConfig] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // Ingest stream state
   const [ytUrl, setYtUrl] = useState("");
   const [pumpToken, setPumpToken] = useState("2PENPmfgJfq6CG3k4byj4oWwHf8SerqakmYHMkUupump");
   const [fetchingPump, setFetchingPump] = useState(false);
@@ -58,6 +77,7 @@ export default function VrmStudioPage() {
   ]);
   const [userChatInput, setUserChatInput] = useState("");
 
+  // Fetch registered agents
   useEffect(() => {
     const fetchAgents = async () => {
       const token = getToken();
@@ -81,20 +101,86 @@ export default function VrmStudioPage() {
     fetchAgents();
   }, []);
 
-  const speakText = (text: string) => {
-    if (!ttsEnabled || typeof window === "undefined" || !("speechSynthesis" in window)) {
-      return;
+  // Save live config to agent endpoint /api/agents/[id]/live
+  const handleSaveLiveConfig = async () => {
+    if (!selectedAgentId) return;
+    const token = getToken();
+    if (!token) return;
+    setSavingLiveConfig(true);
+    setSaveSuccess(false);
+
+    try {
+      const configPayload = {
+        pumpMint: pumpToken,
+        youtubeLiveUrl: ytUrl,
+        llmProvider,
+        llmModel,
+        ttsProvider,
+        elevenLabsVoiceId,
+        expression,
+        chromaBg,
+        vrmUrl,
+      };
+
+      const res = await fetch(`/api/agents/${selectedAgentId}/live`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(configPayload),
+      });
+
+      if (res.ok) {
+        setSaveSuccess(true);
+        setTimeout(() => setSaveSuccess(false), 3000);
+      }
+    } catch (err) {
+      console.error("Failed to save agent live config:", err);
+    } finally {
+      setSavingLiveConfig(false);
     }
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 1.0;
-    utterance.pitch = 1.1;
+  };
 
-    utterance.onstart = () => setSpeaking(true);
-    utterance.onend = () => setSpeaking(false);
-    utterance.onerror = () => setSpeaking(false);
+  // Speak text using Web Speech API or ElevenLabs TTS
+  const speakText = async (text: string) => {
+    if (!ttsEnabled || typeof window === "undefined") return;
 
-    window.speechSynthesis.speak(utterance);
+    if (ttsProvider === "elevenlabs" && elevenLabsKey) {
+      const audioBuffer = await generateElevenLabsTtsAudio(
+        text,
+        elevenLabsKey,
+        elevenLabsVoiceId
+      );
+      if (audioBuffer) {
+        try {
+          const blob = new Blob([audioBuffer], { type: "audio/mpeg" });
+          const url = URL.createObjectURL(blob);
+          const audio = new Audio(url);
+          setSpeaking(true);
+          audio.onended = () => setSpeaking(false);
+          audio.onerror = () => setSpeaking(false);
+          await audio.play();
+          return;
+        } catch (err) {
+          console.warn("ElevenLabs audio play failed, falling back to Web Speech:", err);
+        }
+      }
+    }
+
+    // Fallback: Web Speech API
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 1.0;
+      utterance.pitch = 1.1;
+
+      utterance.onstart = () => setSpeaking(true);
+      utterance.onend = () => setSpeaking(false);
+      utterance.onerror = () => setSpeaking(false);
+
+      window.speechSynthesis.speak(utterance);
+    }
   };
 
   const formatMcap = (val: number | string | undefined | null) => {
@@ -137,7 +223,7 @@ export default function VrmStudioPage() {
     handleFetchPumpToken();
   }, []);
 
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     if (!userChatInput.trim()) return;
     const text = userChatInput.trim();
     const newMsg = {
@@ -148,18 +234,23 @@ export default function VrmStudioPage() {
     setChatMessages((prev) => [...prev, newMsg]);
     setUserChatInput("");
 
-    const reply = `Aero reply to "${text}": Welcome to our live Solana stream!`;
-    setTimeout(() => {
-      setChatMessages((prev) => [
-        ...prev,
-        {
-          user: agentName,
-          text: reply,
-          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        },
-      ]);
-      speakText(reply);
-    }, 600);
+    // Generate LLM reply
+    const reply = await generateVtuberLlmReply(text, {
+      provider: llmProvider,
+      apiKey: llmApiKey,
+      model: llmModel,
+      systemPrompt,
+    });
+
+    setChatMessages((prev) => [
+      ...prev,
+      {
+        user: agentName,
+        text: reply,
+        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      },
+    ]);
+    speakText(reply);
   };
 
   return (
@@ -246,13 +337,33 @@ export default function VrmStudioPage() {
         {/* Right Side Control Dock / Ingest Panel */}
         {!hideDock && (
           <div className="w-full lg:w-96 h-full border-l border-cyan-500/20 bg-slate-950/90 backdrop-blur-xl flex flex-col p-4 overflow-y-auto space-y-4 text-slate-200">
-            <div>
-              <h2 className="text-base font-bold text-cyan-400 uppercase tracking-wider flex items-center gap-2">
-                <Video className="w-4 h-4" /> AI VTuber Studio Control
-              </h2>
-              <p className="text-xs text-slate-400 mt-1">
-                Stream 3D VRM agents directly to YouTube Live or pump.fun.
-              </p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-bold text-cyan-400 uppercase tracking-wider flex items-center gap-2">
+                  <Video className="w-4 h-4" /> AI VTuber Studio Control
+                </h2>
+                <p className="text-xs text-slate-400 mt-1">
+                  Stream 3D VRM/GLB agents live to YouTube & pump.fun.
+                </p>
+              </div>
+
+              {selectedAgentId && (
+                <button
+                  onClick={handleSaveLiveConfig}
+                  disabled={savingLiveConfig}
+                  className="bg-cyan-500 hover:bg-cyan-400 text-black px-2.5 py-1.5 rounded text-xs font-mono font-bold flex items-center gap-1 shrink-0"
+                >
+                  {saveSuccess ? (
+                    <>
+                      <CheckCircle2 className="w-3.5 h-3.5 text-green-950" /> Saved
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-3.5 h-3.5" /> Save
+                    </>
+                  )}
+                </button>
+              )}
             </div>
 
             {/* Agent Identity Selector */}
@@ -281,31 +392,72 @@ export default function VrmStudioPage() {
               </div>
             )}
 
-            {/* Always Visible Stream Credentials / Keys Settings Panel */}
+            {/* LLM Engine & Voice Settings Panel */}
             <div className="space-y-2 border-t border-cyan-500/20 pt-3 bg-slate-900/60 p-2.5 rounded-lg">
               <div className="text-xs font-mono text-amber-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
-                <Key className="w-3.5 h-3.5" /> Stream Keys & Credentials
+                <Cpu className="w-3.5 h-3.5" /> Brain & Voice Settings
               </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] text-slate-400">LLM Provider</label>
+                  <select
+                    value={llmProvider}
+                    onChange={(e) => setLlmProvider(e.target.value as any)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded p-1 text-xs text-white mt-0.5"
+                  >
+                    <option value="openai">OpenAI</option>
+                    <option value="openrouter">OpenRouter</option>
+                    <option value="groq">Groq</option>
+                    <option value="deepseek">DeepSeek</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[10px] text-slate-400">TTS Engine</label>
+                  <select
+                    value={ttsProvider}
+                    onChange={(e) => setTtsProvider(e.target.value as any)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded p-1 text-xs text-white mt-0.5"
+                  >
+                    <option value="webspeech">Web Speech (Free)</option>
+                    <option value="elevenlabs">ElevenLabs</option>
+                  </select>
+                </div>
+              </div>
+
               <div>
-                <label className="text-[10px] text-slate-400">ElevenLabs Voice Key (Optional)</label>
+                <label className="text-[10px] text-slate-400">LLM API Key</label>
                 <input
                   type="password"
-                  placeholder="xi-..."
-                  value={elevenLabsKey}
-                  onChange={(e) => setElevenLabsKey(e.target.value)}
+                  placeholder="sk-... / gsk_..."
+                  value={llmApiKey}
+                  onChange={(e) => setLlmApiKey(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-700 rounded p-1.5 text-xs text-white mt-0.5"
                 />
               </div>
-              <div>
-                <label className="text-[10px] text-slate-400">OpenAI / OpenRouter Key (Optional)</label>
-                <input
-                  type="password"
-                  placeholder="sk-..."
-                  value={openAiKey}
-                  onChange={(e) => setOpenAiKey(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded p-1.5 text-xs text-white mt-0.5"
-                />
-              </div>
+
+              {ttsProvider === "elevenlabs" && (
+                <div>
+                  <label className="text-[10px] text-slate-400">ElevenLabs Key & Voice ID</label>
+                  <div className="grid grid-cols-2 gap-2 mt-0.5">
+                    <input
+                      type="password"
+                      placeholder="xi-..."
+                      value={elevenLabsKey}
+                      onChange={(e) => setElevenLabsKey(e.target.value)}
+                      className="bg-slate-950 border border-slate-700 rounded p-1.5 text-xs text-white"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Voice ID"
+                      value={elevenLabsVoiceId}
+                      onChange={(e) => setElevenLabsVoiceId(e.target.value)}
+                      className="bg-slate-950 border border-slate-700 rounded p-1.5 text-xs text-white"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Model Avatar Gallery Picker */}
@@ -321,6 +473,7 @@ export default function VrmStudioPage() {
                 <option value="/vrm/sample1.glb">Avatar 1 (Avocado 3D Core)</option>
                 <option value="/vrm/sample2.glb">Avatar 2 (Duck 3D Mascot)</option>
                 <option value="/vrm/sample3.glb">Avatar 3 (Fox 3D Animated)</option>
+                <option value="/vrm/sample4.glb">Avatar 4 (Cesium Human 3D)</option>
               </select>
               <div className="flex gap-2 pt-1">
                 <input
