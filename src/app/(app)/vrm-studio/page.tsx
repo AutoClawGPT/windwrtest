@@ -683,7 +683,7 @@ export default function VrmStudioPage() {
                     className="flex-1 bg-slate-900 border border-cyan-500/30 rounded p-1.5 text-xs font-mono text-white"
                   />
                   <button
-                    onClick={handleFetchPumpToken}
+                    onClick={() => void handleFetchPumpToken()}
                     disabled={fetchingPump}
                     className="bg-amber-500 hover:bg-amber-400 text-black px-3 rounded text-xs font-bold uppercase tracking-wider flex items-center gap-1"
                   >
