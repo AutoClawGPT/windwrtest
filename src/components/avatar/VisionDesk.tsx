@@ -21,7 +21,7 @@ export function VisionDesk({
   onSelectAvatar,
   busy,
 }: Props) {
-  const [tab, setTab] = useState<Tab>("clips");
+  const [tab, setTab] = useState<Tab>("avatars");
   const [clipMsg, setClipMsg] = useState<string | null>(null);
   const [playing, setPlaying] = useState<string | null>(null);
   const seqRef = useRef(0);

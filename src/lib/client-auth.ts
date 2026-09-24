@@ -40,14 +40,15 @@ export function clearAuth() {
   localStorage.removeItem(USER_KEY);
 }
 
-export async function apiFetch(path: string, init: RequestInit = {}) {
+export async function apiFetch(path: string, init?: RequestInit) {
   const token = getToken();
-  const headers = new Headers(init.headers);
-  if (!headers.has("Content-Type") && init.body) {
+  const safe = init ?? {};
+  const headers = new Headers(safe.headers ?? undefined);
+  if (!headers.has("Content-Type") && safe.body) {
     headers.set("Content-Type", "application/json");
   }
   if (token) headers.set("Authorization", `Bearer ${token}`);
-  const res = await fetch(path, { ...init, headers });
+  const res = await fetch(path, { ...safe, headers });
   const data = await res.json().catch(() => ({}));
   return { res, data };
 }

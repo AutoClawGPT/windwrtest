@@ -270,7 +270,11 @@ export default function AgentProfilePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loaded, isOwner, agent?.id, agent?.avatarGlbUrl]);
 
-  const bodyUrl = agent?.avatarGlbUrl || DEFAULT_GLB;
+  const savedBody = agent?.avatarGlbUrl || "";
+  const bodyUrl =
+    /^https?:\/\//i.test(savedBody) && !savedBody.includes("/vrm/")
+      ? savedBody
+      : DEFAULT_GLB;
   const skills = agent?.skills || [];
   const running = agent?.status === "running";
   const payout =
@@ -349,11 +353,7 @@ export default function AgentProfilePage() {
           <Agent3D
             ref={avatarRef}
             body={bodyUrl}
-            src={
-              bodyUrl.includes("/api/avatars/")
-                ? bodyUrl
-                : AVATAR_CATALOG.find((e) => e.bodyUrl === bodyUrl)?.srcUrl
-            }
+            src={bodyUrl.includes("/api/avatars/") ? bodyUrl : undefined}
             name={agent?.name || "Agent"}
             accent="#5eead4"
             eager
