@@ -87,9 +87,9 @@ export default function VrmStudioPage() {
   const [ytKey, setYtKey] = useState("");
   const [streamKey, setStreamKey] = useState("");
   const [motionText, setMotionText] = useState("");
-  const [desk, setDesk] = useState<"all" | "body" | "brain" | "youtube" | "pump" | "motion" | "drive">("all");
+  const [desk, setDesk] = useState<"all" | "live" | "body" | "brain" | "youtube" | "pump" | "motion" | "drive">("live");
   const lastSpeak = useRef("");
-  const show = (name: "body" | "brain" | "youtube" | "pump" | "motion" | "drive") =>
+  const show = (name: "live" | "body" | "brain" | "youtube" | "pump" | "motion" | "drive") =>
     desk === "all" || desk === name;
   const [ytConnected, setYtConnected] = useState(false);
   const ytOn = useRef(false);
@@ -603,7 +603,7 @@ export default function VrmStudioPage() {
             )}
 
             <div className="flex flex-wrap gap-1">
-              {(["all", "body", "brain", "youtube", "pump", "motion", "drive"] as const).map((name) => (
+              {(["live", "all", "body", "brain", "youtube", "pump", "motion", "drive"] as const).map((name) => (
                 <button
                   key={name}
                   type="button"
@@ -617,6 +617,28 @@ export default function VrmStudioPage() {
                   {name}
                 </button>
               ))}
+            </div>
+
+            <div className={`${show("live") ? "" : "hidden "}space-y-2 border border-cyan-500/40 rounded-lg p-2.5 bg-black/50`}>
+              <div className="text-xs font-mono text-cyan-300 uppercase">Go live checklist</div>
+              <ol className="text-[11px] font-mono text-slate-300 space-y-1 list-decimal pl-4">
+                <li>Body is Haru. She is already on the stage.</li>
+                <li>Voice is Edge. No key. Press Test to hear her.</li>
+                <li>Brain: paste your own LLM key only if you want chat replies.</li>
+                <li>YouTube chat: your Data API key plus the live URL, then Connect.</li>
+                <li>YouTube picture: stream key, then Copy RTMP command, run it in OBS or ffmpeg.</li>
+                <li>pump.fun: paste the mint, Fetch, then share this browser tab.</li>
+              </ol>
+              <button
+                type="button"
+                onClick={() => void speakText("Haru is on. This is the voice check.")}
+                className="bg-cyan-500 text-black px-3 py-1.5 rounded text-xs font-bold"
+              >
+                Test Haru voice
+              </button>
+              <p className="text-[10px] font-mono text-slate-500">
+                Model file: /live2d-models/haru/haru_greeter_t05.model3.json
+              </p>
             </div>
 
             {/* LLM Engine & Voice Settings Panel */}

@@ -8,6 +8,7 @@
     "initialYshift": 0,
     "idleMotionGroupName": "Idle",
     "defaultEmotion": 0,
+    "note": "Official Cubism sample the user uploaded. Idle group is Idle.",
     "emotionMap": {
       "neutral": 0,
       "joy": 1,
