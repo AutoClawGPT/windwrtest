@@ -15,7 +15,7 @@ interface VrmStudioProps {
 }
 
 export function VrmStudio({
-  vrmUrl = "https://pixiv.github.io/three-vrm/packages/three-vrm/examples/models/VRM1_Constraint_Sample.vrm",
+  vrmUrl = "/vrm/sample1.glb",
   chromaBg = false,
   speaking = false,
   expression = "neutral",
@@ -24,12 +24,12 @@ export function VrmStudio({
 }: VrmStudioProps) {
   const mountRef = useRef<HTMLDivElement>(null);
   const currentVrmRef = useRef<VRM | null>(null);
+  const currentModelSceneRef = useRef<THREE.Object3D | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Mutable refs for state properties inside animation loop without re-init
   const stateRef = useRef({ speaking, expression, autoLookAt, chromaBg });
   useEffect(() => {
     stateRef.current = { speaking, expression, autoLookAt, chromaBg };
@@ -60,14 +60,14 @@ export function VrmStudio({
       0.1,
       20
     );
-    camera.position.set(0, 1.4, 1.3);
-    camera.lookAt(0, 1.3, 0);
+    camera.position.set(0, 1.4, 2.5);
+    camera.lookAt(0, 1.0, 0);
 
     // Lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
     scene.add(ambientLight);
 
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
     dirLight.position.set(1, 2, 1).normalize();
     scene.add(dirLight);
 
@@ -75,7 +75,7 @@ export function VrmStudio({
     const lookAtTarget = new THREE.Object3D();
     scene.add(lookAtTarget);
 
-    // VRM Loader
+    // Loader setup
     const loader = new GLTFLoader();
     loader.register((parser) => new VRMLoaderPlugin(parser));
 
@@ -85,23 +85,43 @@ export function VrmStudio({
     loader.load(
       vrmUrl,
       (gltf) => {
-        const vrm = gltf.userData.vrm as VRM;
-        if (!vrm) {
-          setError("Failed to parse VRM metadata.");
-          setLoading(false);
-          return;
+        // Clean up previous model if any
+        if (currentModelSceneRef.current) {
+          scene.remove(currentModelSceneRef.current);
+          currentModelSceneRef.current = null;
         }
 
-        VRMUtils.rotateVRM0(vrm);
-        scene.add(vrm.scene);
-        currentVrmRef.current = vrm;
+        const vrm = gltf.userData.vrm as VRM | undefined;
+        if (vrm) {
+          VRMUtils.rotateVRM0(vrm);
+          scene.add(vrm.scene);
+          currentVrmRef.current = vrm;
+          currentModelSceneRef.current = vrm.scene;
+        } else {
+          // Fallback: Standard GLB 3D model
+          const modelScene = gltf.scene;
+          const box = new THREE.Box3().setFromObject(modelScene);
+          const center = box.getCenter(new THREE.Vector3());
+          const size = box.getSize(new THREE.Vector3());
+          const maxDim = Math.max(size.x, size.y, size.z);
+          const scale = 1.2 / maxDim;
+
+          modelScene.scale.set(scale, scale, scale);
+          modelScene.position.sub(center.multiplyScalar(scale));
+          modelScene.position.y += 0.8;
+
+          scene.add(modelScene);
+          currentModelSceneRef.current = modelScene;
+          currentVrmRef.current = null;
+        }
+
         setLoading(false);
         if (onLoaded) onLoaded();
       },
       undefined,
       (err) => {
-        console.warn("VRM Load Error:", err);
-        setError("Could not load .vrm file. Check CORS or URL.");
+        console.warn("3D Avatar Load Error:", err);
+        setError("Could not load 3D model file. Check URL or CORS.");
         setLoading(false);
       }
     );
@@ -126,12 +146,12 @@ export function VrmStudio({
       const time = clock.getElapsedTime();
 
       const vrm = currentVrmRef.current;
+      const model = currentModelSceneRef.current;
       const currentState = stateRef.current;
 
       if (vrm) {
         vrm.update(delta);
 
-        // Head sway
         if (vrm.humanoid) {
           const head = vrm.humanoid.getNormalizedBoneNode("head");
           if (head) {
@@ -140,13 +160,11 @@ export function VrmStudio({
           }
         }
 
-        // Look at mouse
         if (currentState.autoLookAt && vrm.lookAt) {
           lookAtTarget.position.set(mouse.x * 2, mouse.y * 2 + 1.3, 1.0);
           vrm.lookAt.target = lookAtTarget;
         }
 
-        // Natural Blink loop
         blinkTimer += delta;
         if (vrm.expressionManager) {
           if (blinkTimer > 3) {
@@ -158,7 +176,6 @@ export function VrmStudio({
             }
           }
 
-          // Dynamic Lip-Sync Viseme simulation when speaking
           if (currentState.speaking) {
             const mouthOpen = (Math.sin(time * 18) + 1) / 2;
             vrm.expressionManager.setValue("aa", mouthOpen * 0.8);
@@ -166,10 +183,17 @@ export function VrmStudio({
             vrm.expressionManager.setValue("aa", 0);
           }
 
-          // Expression preset (happy, angry, sad, relaxed, neutral)
           if (currentState.expression !== "neutral") {
             vrm.expressionManager.setValue(currentState.expression, 0.7);
           }
+        }
+      } else if (model) {
+        // Fallback GLB idle motion
+        model.rotation.y = Math.sin(time * 0.8) * 0.15;
+        if (currentState.speaking) {
+          model.position.y = 0.8 + Math.sin(time * 12) * 0.04;
+        } else {
+          model.position.y = 0.8 + Math.sin(time * 2) * 0.01;
         }
       }
 
@@ -202,7 +226,7 @@ export function VrmStudio({
       {loading && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm z-10 text-cyan-400">
           <div className="w-8 h-8 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin mb-3"></div>
-          <span className="font-mono text-xs uppercase tracking-widest">Loading VRM Avatar...</span>
+          <span className="font-mono text-xs uppercase tracking-widest">Loading 3D Avatar...</span>
         </div>
       )}
       {error && (

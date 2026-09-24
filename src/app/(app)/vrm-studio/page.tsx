@@ -15,16 +15,15 @@ import {
   MessageSquare,
   Sparkles,
   Search,
-  CheckCircle2,
-  ExternalLink,
   Volume2,
   VolumeX,
+  Bot,
+  Key,
 } from "lucide-react";
+import { getToken } from "@/lib/client-auth";
 
 export default function VrmStudioPage() {
-  const [vrmUrl, setVrmUrl] = useState(
-    "https://pixiv.github.io/three-vrm/packages/three-vrm/examples/models/VRM1_Constraint_Sample.vrm"
-  );
+  const [vrmUrl, setVrmUrl] = useState("/vrm/sample1.glb");
   const [customUrlInput, setCustomUrlInput] = useState("");
   const [chromaBg, setChromaBg] = useState(false);
   const [hideDock, setHideDock] = useState(false);
@@ -33,7 +32,12 @@ export default function VrmStudioPage() {
   const [ttsEnabled, setTtsEnabled] = useState(true);
   const [agentName, setAgentName] = useState("AeroVTuber Agent");
 
-  // Ingest stream state
+  const [registeredAgents, setRegisteredAgents] = useState<{ id: string; name: string }[]>([]);
+  const [selectedAgentId, setSelectedAgentId] = useState("");
+
+  const [elevenLabsKey, setElevenLabsKey] = useState("");
+  const [openAiKey, setOpenAiKey] = useState("");
+
   const [ytUrl, setYtUrl] = useState("");
   const [pumpToken, setPumpToken] = useState("2PENPmfgJfq6CG3k4byj4oWwHf8SerqakmYHMkUupump");
   const [fetchingPump, setFetchingPump] = useState(false);
@@ -54,7 +58,29 @@ export default function VrmStudioPage() {
   ]);
   const [userChatInput, setUserChatInput] = useState("");
 
-  // Speak text using Web Speech API TTS
+  useEffect(() => {
+    const fetchAgents = async () => {
+      const token = getToken();
+      if (!token) return;
+      try {
+        const res = await fetch("/api/agents", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        if (data.agents && Array.isArray(data.agents)) {
+          setRegisteredAgents(data.agents);
+          if (data.agents.length > 0) {
+            setSelectedAgentId(data.agents[0].id);
+            setAgentName(data.agents[0].name);
+          }
+        }
+      } catch (err) {
+        console.warn("Failed to fetch registered agents:", err);
+      }
+    };
+    fetchAgents();
+  }, []);
+
   const speakText = (text: string) => {
     if (!ttsEnabled || typeof window === "undefined" || !("speechSynthesis" in window)) {
       return;
@@ -71,7 +97,15 @@ export default function VrmStudioPage() {
     window.speechSynthesis.speak(utterance);
   };
 
-  // Fetch real pump.fun token data
+  const formatMcap = (val: number | string | undefined | null) => {
+    if (val === undefined || val === null) return "Live";
+    const num = typeof val === "number" ? val : parseFloat(String(val).replace(/[^0-9.]/g, ""));
+    if (isNaN(num)) return typeof val === "string" ? val : "Live";
+    if (num >= 1_000_000) return `$${(num / 1_000_000).toFixed(2)}M`;
+    if (num >= 1_000) return `$${(num / 1_000).toFixed(2)}K`;
+    return `$${num.toFixed(2)}`;
+  };
+
   const handleFetchPumpToken = async () => {
     if (!pumpToken.trim()) return;
     setFetchingPump(true);
@@ -99,7 +133,6 @@ export default function VrmStudioPage() {
     }
   };
 
-  // Auto-fetch default token on load
   useEffect(() => {
     handleFetchPumpToken();
   }, []);
@@ -115,7 +148,6 @@ export default function VrmStudioPage() {
     setChatMessages((prev) => [...prev, newMsg]);
     setUserChatInput("");
 
-    // Simulate Agent Reaction + Web Speech TTS
     const reply = `Aero reply to "${text}": Welcome to our live Solana stream!`;
     setTimeout(() => {
       setChatMessages((prev) => [
@@ -173,7 +205,7 @@ export default function VrmStudioPage() {
                   {pumpData.name} (${pumpData.symbol})
                 </div>
                 <div className="text-slate-300 text-[10px]">
-                  MCap: {pumpData.usdMarketCap ? `$${Number(pumpData.usdMarketCap).toLocaleString()}` : "Live"}
+                  MCap: {formatMcap(pumpData.usdMarketCap)}
                 </div>
               </div>
             </div>
@@ -223,24 +255,77 @@ export default function VrmStudioPage() {
               </p>
             </div>
 
-            {/* Model Avatar Picker */}
+            {/* Agent Identity Selector */}
+            {registeredAgents.length > 0 && (
+              <div className="space-y-1.5 border-t border-cyan-500/20 pt-3">
+                <label className="text-xs font-mono text-cyan-300 flex items-center gap-1">
+                  <Bot className="w-3.5 h-3.5" /> Select Registered Agent
+                </label>
+                <select
+                  value={selectedAgentId}
+                  onChange={(e) => {
+                    const agent = registeredAgents.find((a) => a.id === e.target.value);
+                    if (agent) {
+                      setSelectedAgentId(agent.id);
+                      setAgentName(agent.name);
+                    }
+                  }}
+                  className="w-full bg-slate-900 border border-cyan-500/30 rounded p-2 text-xs font-mono text-white focus:outline-none focus:border-cyan-400"
+                >
+                  {registeredAgents.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name} ({a.id.slice(0, 8)}...)
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Always Visible Stream Credentials / Keys Settings Panel */}
+            <div className="space-y-2 border-t border-cyan-500/20 pt-3 bg-slate-900/60 p-2.5 rounded-lg">
+              <div className="text-xs font-mono text-amber-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                <Key className="w-3.5 h-3.5" /> Stream Keys & Credentials
+              </div>
+              <div>
+                <label className="text-[10px] text-slate-400">ElevenLabs Voice Key (Optional)</label>
+                <input
+                  type="password"
+                  placeholder="xi-..."
+                  value={elevenLabsKey}
+                  onChange={(e) => setElevenLabsKey(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded p-1.5 text-xs text-white mt-0.5"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] text-slate-400">OpenAI / OpenRouter Key (Optional)</label>
+                <input
+                  type="password"
+                  placeholder="sk-..."
+                  value={openAiKey}
+                  onChange={(e) => setOpenAiKey(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded p-1.5 text-xs text-white mt-0.5"
+                />
+              </div>
+            </div>
+
+            {/* Model Avatar Gallery Picker */}
             <div className="space-y-2 border-t border-cyan-500/20 pt-3">
               <label className="text-xs font-mono text-cyan-300 flex items-center gap-1">
-                <Sparkles className="w-3.5 h-3.5" /> VRM Avatar Model
+                <Sparkles className="w-3.5 h-3.5" /> 3D Avatar Model Presets
               </label>
               <select
                 value={vrmUrl}
                 onChange={(e) => setVrmUrl(e.target.value)}
                 className="w-full bg-slate-900 border border-cyan-500/30 rounded p-2 text-xs font-mono text-white focus:outline-none focus:border-cyan-400"
               >
-                <option value="https://pixiv.github.io/three-vrm/packages/three-vrm/examples/models/VRM1_Constraint_Sample.vrm">
-                  Sample VRM 1.0 Avatar
-                </option>
+                <option value="/vrm/sample1.glb">Avatar 1 (Avocado 3D Core)</option>
+                <option value="/vrm/sample2.glb">Avatar 2 (Duck 3D Mascot)</option>
+                <option value="/vrm/sample3.glb">Avatar 3 (Fox 3D Animated)</option>
               </select>
               <div className="flex gap-2 pt-1">
                 <input
                   type="text"
-                  placeholder="Paste custom .vrm URL..."
+                  placeholder="Paste custom .vrm or .glb URL..."
                   value={customUrlInput}
                   onChange={(e) => setCustomUrlInput(e.target.value)}
                   className="flex-1 bg-slate-900 border border-cyan-500/30 rounded p-1.5 text-xs font-mono text-white placeholder-slate-500"
