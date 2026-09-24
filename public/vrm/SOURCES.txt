@@ -3,6 +3,9 @@ CC0 characters from 100 Avatars R1 by ToxSam
 https://github.com/ToxSam/open-source-avatars
 https://opensourceavatars.com
 
+kokori-sleep.glb
+Sleep outfit mesh converted from the FBX you uploaded (kokori3D). Textures sit beside the file.
+
 test.vrma
 Sample motion from pixiv/three-vrm-animation examples
 https://github.com/pixiv/three-vrm

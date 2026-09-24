@@ -730,6 +730,7 @@ export default function VrmStudioPage() {
                   ["/vrm/robert.vrm", "Robert"],
                   ["/vrm/polydancer.vrm", "Polydancer"],
                   ["/vrm/rabbit.vrm", "Rabbit"],
+                  ["/vrm/kokori-sleep.glb", "Kokori sleep"],
                 ].map(([url, label]) => (
                   <button
                     key={url}
