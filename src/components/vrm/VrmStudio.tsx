@@ -44,9 +44,10 @@ export function VrmStudio({
 
     // Renderer setup
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setSize(container.clientWidth, container.clientHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.domElement.style.width = "100%";
+    renderer.domElement.style.height = "100%";
     container.appendChild(renderer.domElement);
 
     // Scene & Camera setup
@@ -62,6 +63,14 @@ export function VrmStudio({
     );
     camera.position.set(0, 1.4, 2.5);
     camera.lookAt(0, 1.0, 0);
+
+    const fit = () => {
+      const w = Math.max(container.clientWidth, 320);
+      const h = Math.max(container.clientHeight, 480);
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h, false);
+    };
 
     // Lighting
     const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
@@ -92,6 +101,7 @@ export function VrmStudio({
         }
 
         const vrm = gltf.userData.vrm as VRM | undefined;
+        const subject = vrm ? vrm.scene : gltf.scene;
         if (vrm) {
           VRMUtils.rotateVRM0(vrm);
           scene.add(vrm.scene);
@@ -114,6 +124,17 @@ export function VrmStudio({
           currentModelSceneRef.current = modelScene;
           currentVrmRef.current = null;
         }
+
+        const box = new THREE.Box3().setFromObject(subject);
+        const size = box.getSize(new THREE.Vector3());
+        const center = box.getCenter(new THREE.Vector3());
+        const height = Math.max(size.y, 0.5);
+        camera.position.set(center.x, center.y, center.z + height * 1.6);
+        camera.near = 0.01;
+        camera.far = Math.max(50, height * 20);
+        camera.lookAt(center);
+        camera.updateProjectionMatrix();
+        fit();
 
         setLoading(false);
         if (onLoaded) onLoaded();
@@ -209,8 +230,12 @@ export function VrmStudio({
       renderer.setSize(container.clientWidth, container.clientHeight);
     };
     window.addEventListener("resize", handleResize);
+    const observer = new ResizeObserver(() => fit());
+    observer.observe(container);
+    fit();
 
     return () => {
+      observer.disconnect();
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("resize", handleResize);
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
