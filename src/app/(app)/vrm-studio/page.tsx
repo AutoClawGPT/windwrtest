@@ -726,10 +726,10 @@ export default function VrmStudioPage() {
               </p>
               <div className="grid grid-cols-2 gap-2">
                 {[
-                  ["/vrm/seed-san.vrm", "Seed-san"],
-                  ["/vrm/twist.vrm", "Twist"],
-                  ["/vrm/avatar-a.vrm", "Avatar A"],
-                  ["/vrm/avatar-b.vrm", "Avatar B"],
+                  ["/vrm/rose.vrm", "Rose"],
+                  ["/vrm/robert.vrm", "Robert"],
+                  ["/vrm/polydancer.vrm", "Polydancer"],
+                  ["/vrm/rabbit.vrm", "Rabbit"],
                 ].map(([url, label]) => (
                   <button
                     key={url}
