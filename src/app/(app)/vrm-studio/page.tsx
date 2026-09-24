@@ -42,7 +42,7 @@ function modelUrl(agent: StudioAgent): string | null {
 }
 
 export default function VrmStudioPage() {
-  const [vrmUrl, setVrmUrl] = useState("/vrm/twist.vrm");
+  const [vrmUrl, setVrmUrl] = useState("/vrm/rose.vrm");
   const [vrmaUrl, setVrmaUrl] = useState("/vrm/test.vrma");
   const [customUrlInput, setCustomUrlInput] = useState("");
   const [chromaBg, setChromaBg] = useState(false);

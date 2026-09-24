@@ -1,5 +1,8 @@
-seed-san.vrm and twist.vrm — VRM Consortium samples, VRM Public License 1.0
-https://github.com/vrm-c/vrm-specification/tree/master/samples
+rose.vrm, robert.vrm, polydancer.vrm, rabbit.vrm
+CC0 characters from 100 Avatars R1 by ToxSam
+https://github.com/ToxSam/open-source-avatars
+https://opensourceavatars.com
 
-avatar-a.vrm — VRoid AvatarSample_A
-avatar-b.vrm — VRoid AvatarSample_B, shipped with https://github.com/pixiv/ChatVRM
+test.vrma
+Sample motion from pixiv/three-vrm-animation examples
+https://github.com/pixiv/three-vrm

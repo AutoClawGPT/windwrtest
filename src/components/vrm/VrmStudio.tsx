@@ -21,7 +21,7 @@ interface VrmStudioProps {
 }
 
 export function VrmStudio({
-  vrmUrl = "/vrm/seed-san.vrm",
+  vrmUrl = "/vrm/rose.vrm",
   vrmaUrl = "",
   chromaBg = false,
   speaking = false,
